@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elliot Lee - Air Quality Telemetry</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.05);
+            --accent-temp: #f59e0b;
+            --accent-hum: #38bdf8;
+            --accent-pm-good: #10b981;
+            --accent-pm-bad: #ef4444;
+            --accent-brand: #6366f1;
+        }
+
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background: var(--bg-color); 
+            color: var(--text-main); 
+            margin: 0; 
+            padding: 40px 20px; 
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            max-width: 1200px; 
+            margin: 0 auto 40px auto; 
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+        }
+
+        .header-text h1 { 
+            margin: 0 0 8px 0; 
+            font-size: 2rem; 
+            font-weight: 700; 
+            letter-spacing: -0.5px; 
+        }
+
+        .header-text .subtitle {
+            font-size: 0.95rem;
+            color: var(--accent-brand);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+        }
+
+        .header-text .subtitle span {
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        #connectBtn { 
+            background: #3b82f6; 
+            color: white; 
+            border: none; 
+            padding: 12px 24px; 
+            font-size: 0.95rem; 
+            font-weight: 600; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            transition: all 0.2s ease; 
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25); 
+        }
+
+        #connectBtn:hover { 
+            background: #2563eb; 
+            transform: translateY(-1px); 
+        }
+
+        .dashboard { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); 
+            gap: 24px; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+        }
+
+        .card { 
+            background: var(--card-bg); 
+            border: 1px solid var(--border-color); 
+            border-radius: 16px; 
+            padding: 24px; 
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); 
+            display: flex; 
+            flex-direction: column; 
+        }
+
+        .card-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: flex-start; 
+            margin-bottom: 8px; 
+        }
+
+        .label { 
+            font-size: 0.85rem; 
+            color: var(--text-muted); 
+            text-transform: uppercase; 
+            letter-spacing: 1.5px; 
+            font-weight: 600; 
+        }
+
+        .value-container { display: flex; align-items: baseline; gap: 4px; }
+        .value { font-size: 2.8rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+        .unit { font-size: 1rem; color: var(--text-muted); font-weight: 500; }
+        .chart-container { position: relative; height: 140px; width: 100%; margin-top: 20px; }
+
+        .color-temp { color: var(--accent-temp); }
+        .color-hum { color: var(--accent-hum); }
+        .color-pm-good { color: var(--accent-pm-good); }
+        .color-pm-bad { color: var(--accent-pm-bad); }
+
+        /* Secondary Data Row */
+        .secondary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+            max-width: 1200px;
+            margin: 24px auto 0 auto;
+        }
+
+        .diag-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .diag-row:last-child { border-bottom: none; padding-bottom: 0; }
+        .diag-label { color: var(--text-muted); font-weight: 500; }
+        .diag-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="header-text">
+            <h1>Telemetry Overview</h1>
+            <div class="subtitle">Made by Elliot Lee <span>• Embedded IoT System</span></div>
+        </div>
+        <button id="connectBtn">Connect Serial Port</button>
+    </div>
+
+    <div class="dashboard">
+        <div class="card">
+            <div class="card-header"><div class="label">Temperature</div></div>
+            <div class="value-container">
+                <div class="value color-temp" id="tempVal">--</div><div class="unit">°C</div>
+            </div>
+            <div class="chart-container"><canvas id="tempChart"></canvas></div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><div class="label">Humidity</div></div>
+            <div class="value-container">
+                <div class="value color-hum" id="humVal">--</div><div class="unit">%</div>
+            </div>
+            <div class="chart-container"><canvas id="humChart"></canvas></div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><div class="label">PM 2.5 Density</div></div>
+            <div class="value-container">
+                <div class="value color-pm-good" id="pmVal">--</div><div class="unit">µg/m³</div>
+            </div>
+            <div class="chart-container"><canvas id="pmChart"></canvas></div>
+        </div>
+    </div>
+
+    <div class="secondary-grid">
+        <div class="card">
+            <div class="card-header"><div class="label">Session Intelligence</div></div>
+            <div class="diag-row">
+                <span class="diag-label">Peak Temperature:</span>
+                <span class="diag-val color-temp" id="peakTemp">-- °C</span>
+            </div>
+            <div class="diag-row">
+                <span class="diag-label">Peak PM 2.5:</span>
+                <span class="diag-val color-pm-good" id="peakPm">-- µg/m³</span>
+            </div>
+            <div class="diag-row">
+                <span class="diag-label">Data Points Captured:</span>
+                <span class="diag-val" id="dataCount">0</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><div class="label">System Diagnostics</div></div>
+            <div class="diag-row">
+                <span class="diag-label">Interface:</span>
+                <span class="diag-val">Web Serial API</span>
+            </div>
+            <div class="diag-row">
+                <span class="diag-label">Baud Rate:</span>
+                <span class="diag-val">115200</span>
+            </div>
+            <div class="diag-row">
+                <span class="diag-label">Status:</span>
+                <span class="diag-val" id="sysStatus" style="color: var(--text-muted)">Awaiting Connection...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        const maxDataPoints = 30; 
+        
+        let timeLabels = [], tempData = [], humData = [], pmData = [];
+        let maxTemp = -999, maxPm = -1, totalReadings = 0;
+
+        function createChart(ctxId, color, dataArray) {
+            return new Chart(document.getElementById(ctxId), {
+                type: 'line',
+                data: {
+                    labels: timeLabels,
+                    datasets: [{
+                        data: dataArray,
+                        borderColor: color,
+                        backgroundColor: (context) => {
+                            const ctx = context.chart.ctx;
+                            const gradient = ctx.createLinearGradient(0, 0, 0, 140);
+                            gradient.addColorStop(0, color + '40'); 
+                            gradient.addColorStop(1, color + '00'); 
+                            return gradient;
+                        },
+                        borderWidth: 2.5, fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+                    scales: { x: { display: false }, y: { display: false } },
+                    interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                    animation: { duration: 0 } 
+                }
+            });
+        }
+
+        const style = getComputedStyle(document.body);
+        const tempChart = createChart('tempChart', style.getPropertyValue('--accent-temp').trim(), tempData);
+        const humChart = createChart('humChart', style.getPropertyValue('--accent-hum').trim(), humData);
+        const pmChart = createChart('pmChart', style.getPropertyValue('--accent-pm-good').trim(), pmData);
+
+        let port, reader;
+
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+                
+                const btn = document.getElementById('connectBtn');
+                btn.innerText = "Active Link Established";
+                btn.style.background = "var(--accent-pm-good)";
+                btn.style.boxShadow = "0 4px 12px rgba(16, 185, 129, 0.25)";
+                
+                document.getElementById('sysStatus').innerText = "Receiving Data Stream";
+                document.getElementById('sysStatus').style.color = "var(--accent-pm-good)";
+
+                const textDecoder = new TextDecoderStream();
+                port.readable.pipeTo(textDecoder.writable);
+                reader = textDecoder.readable.getReader();
+
+                let buffer = "";
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += value;
+                    let lines = buffer.split('\n');
+                    buffer = lines.pop(); 
+
+                    for (let line of lines) {
+                        line = line.trim();
+                        if (line.startsWith("{") && line.endsWith("}")) {
+                            try { updateDashboard(JSON.parse(line)); } 
+                            catch (e) { console.log("JSON Parse Error: ", e); }
+                        }
+                    }
+                }
+            } catch (err) { console.error("Connection failed: ", err); }
+        });
+
+        function updateDashboard(data) {
+            // Update live numbers
+            document.getElementById('tempVal').innerText = data.temp;
+            document.getElementById('humVal').innerText = data.hum;
+            
+            let pmElement = document.getElementById('pmVal');
+            pmElement.innerText = data.pm25;
+            
+            // Color logic for bad air quality
+            if(data.pm25 > 12) {
+                pmElement.className = "value color-pm-bad";
+                pmChart.data.datasets[0].borderColor = style.getPropertyValue('--accent-pm-bad').trim();
+            } else {
+                pmElement.className = "value color-pm-good";
+                pmChart.data.datasets[0].borderColor = style.getPropertyValue('--accent-pm-good').trim();
+            }
+
+            // Update Session Intelligence stats
+            if (data.temp > maxTemp) {
+                maxTemp = data.temp;
+                document.getElementById('peakTemp').innerText = maxTemp.toFixed(1) + " °C";
+            }
+            if (data.pm25 > maxPm) {
+                maxPm = data.pm25;
+                let peakPmElement = document.getElementById('peakPm');
+                peakPmElement.innerText = maxPm + " µg/m³";
+                peakPmElement.className = maxPm > 12 ? "diag-val color-pm-bad" : "diag-val color-pm-good";
+            }
+            
+            totalReadings++;
+            document.getElementById('dataCount').innerText = totalReadings;
+
+            // Update Charts
+            timeLabels.push(new Date().toLocaleTimeString());
+            tempData.push(data.temp);
+            humData.push(data.hum);
+            pmData.push(data.pm25);
+
+            if (timeLabels.length > maxDataPoints) {
+                timeLabels.shift(); tempData.shift(); humData.shift(); pmData.shift();
+            }
+
+            tempChart.update(); humChart.update(); pmChart.update();
+        }
+    </script>
+</body>
+</html>
